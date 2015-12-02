@@ -5,7 +5,7 @@ namespace Zizit.Sigils.Model
 {
     public class ToNumbersTransformer : ITextTransformer
     {
-        private Dictionary<char, char> _toNumbersMapping = new Dictionary<char, char>
+        private readonly Dictionary<char, char> _toNumbersMapping = new Dictionary<char, char>
         {
             { 'b', '2' },
             { 'c', '3' },

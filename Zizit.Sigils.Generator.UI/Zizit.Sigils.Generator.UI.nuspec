@@ -1,0 +1,13 @@
+<?xml version="1.0"?>
+<package >
+  <metadata>
+    <id>$id$</id>
+    <version>$version$</version>
+    <title>$title$</title>
+    <authors>Zizit</authors>
+    <owners>Zizit</owners>
+    <requireLicenseAcceptance>false</requireLicenseAcceptance>
+    <description>Sigils generator</description>
+    <copyright>Copyright 2015</copyright>
+  </metadata>
+</package>
