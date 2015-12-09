@@ -1,18 +1,11 @@
 ﻿using System;
-using System.CodeDom;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Controls;
-using System.Windows.Data;
-using System.Windows.Documents;
-using System.Windows.Input;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
-using System.Windows.Navigation;
 using System.Windows.Shapes;
 using Zizit.Sigils.Model;
 using Path = System.IO.Path;
@@ -24,9 +17,6 @@ namespace Zizit.Sigils.Generator.UI
     /// </summary>
     public partial class MainWindow : Window
     {
-        private readonly Label[] _labels = { new Label(), new Label(), new Label(), new Label(), new Label(), new Label(), new Label(), new Label(), new Label() };
-        private readonly List<Shape> _shapes = new List<Shape>();
-
         readonly IEnumerable<ITextTransformer> _transformers = new ITextTransformer[]
         {
             new NonUSLettersRemovalTransformer(),
@@ -49,23 +39,53 @@ namespace Zizit.Sigils.Generator.UI
             LayoutRoot.ColumnDefinitions.Add(new ColumnDefinition { MinWidth = 100, MaxWidth = 300 });
 
             LayoutRoot.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto, MaxHeight = 30 });
+            LayoutRoot.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto, MaxHeight = 30 });
+            LayoutRoot.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto, MaxHeight = 30 });
 
             Grid.SetColumn(Menu, 0);
             Grid.SetColumnSpan(Menu, 3);
             Grid.SetRow(Menu, 0);
+            Grid.SetZIndex(Menu, 99999);
 
             Grid.SetColumn(Text, 0);
             Grid.SetColumnSpan(Text, 3);
             Grid.SetRow(Text, 4);
             Text.Focus();
+            Grid.SetZIndex(Text, 99999);
 
-            var viewBoxes = new[] { new Viewbox(), new Viewbox(), new Viewbox(), new Viewbox(), new Viewbox(), new Viewbox(), new Viewbox(), new Viewbox(), new Viewbox() };
+            Grid.SetColumn(ColorsLabel, 0);
+            Grid.SetRow(ColorsLabel, 5);
+            Grid.SetZIndex(ColorsLabel, 99999);
+
+            Grid.SetColumn(GlowColor, 1);
+            Grid.SetRow(GlowColor, 5);
+            Grid.SetZIndex(GlowColor, 99999);
+
+            Grid.SetColumn(LineColor, 2);
+            Grid.SetRow(LineColor, 5);
+            Grid.SetZIndex(LineColor, 99999);
+
+            Grid.SetColumn(SizeLabel, 0);
+            Grid.SetRow(SizeLabel, 6);
+            Grid.SetZIndex(SizeLabel, 99999);
+
+            Grid.SetColumn(GlowSize, 1);
+            Grid.SetRow(GlowSize, 6);
+            Grid.SetZIndex(GlowSize, 99999);
+
+            Grid.SetColumn(LineSize, 2);
+            Grid.SetRow(LineSize, 6);
+            Grid.SetZIndex(LineSize, 99999);
+
+            var viewBoxes = new [] { new Viewbox(), new Viewbox(), new Viewbox(), new Viewbox(), new Viewbox(), new Viewbox(), new Viewbox(), new Viewbox(), new Viewbox() };
+            var labels = new [] { new Label(), new Label(), new Label(), new Label(), new Label(), new Label(), new Label(), new Label(), new Label() };
+
             var index = 0;
             foreach (var viewBox in viewBoxes)
             {
-                _labels[index].Content = index + 1;
-                _labels[index].Foreground = new SolidColorBrush(Color.FromRgb(192, 192, 192));
-                viewBox.Child = _labels[index];
+                labels[index].Content = index + 1;
+                labels[index].Foreground = new SolidColorBrush(Color.FromRgb(192, 192, 192));
+                viewBox.Child = labels[index];
                 viewBox.HorizontalAlignment = HorizontalAlignment.Stretch;
                 viewBox.VerticalAlignment = VerticalAlignment.Stretch;
 
@@ -85,265 +105,462 @@ namespace Zizit.Sigils.Generator.UI
                 index++;
             }
 
-            Grid.SetColumn(FrameBuffer, 0);
-            Grid.SetRow(FrameBuffer, 1);
-            Grid.SetColumnSpan(FrameBuffer, 3);
-            Grid.SetRowSpan(FrameBuffer, 3);
-            Grid.SetZIndex(FrameBuffer, 9999);
+            Grid.SetColumn(GlowCanvas, 0);
+            Grid.SetRow(GlowCanvas, 0);
+            Grid.SetColumnSpan(GlowCanvas, LayoutRoot.ColumnDefinitions.Count);
+            Grid.SetRowSpan(GlowCanvas, LayoutRoot.RowDefinitions.Count);
+            Grid.SetZIndex(GlowCanvas, 444);
+
+            Grid.SetColumn(LineCanvas, 0);
+            Grid.SetRow(LineCanvas, 0);
+            Grid.SetColumnSpan(LineCanvas, LayoutRoot.ColumnDefinitions.Count);
+            Grid.SetRowSpan(LineCanvas, LayoutRoot.RowDefinitions.Count);
+            Grid.SetZIndex(LineCanvas, 555);
         }
 
-        private Point[] CalculatePoints()
+        private Rect GetDrawingCellCoords(int col, int row)
         {
-            var result = new Point[9];
+            double left = 0;
+            double top = LayoutRoot.RowDefinitions[0].ActualHeight;
+            double height = 0;
+            double width = 0;
 
-            for (int i = 0; i < 9; i++)
+            int i;
+            for (i = 0; i < row; i++)
             {
-                result[i] =
-                    _labels[i]
-                        .TranslatePoint(
-                            new Point(_labels[i].ActualWidth/2, _labels[i].ActualHeight/2),
-                            FrameBuffer);
+                top += LayoutRoot.RowDefinitions[i + 1].ActualHeight;
             }
+            height = LayoutRoot.RowDefinitions[i + 1].ActualHeight;
 
-            return result;
+            for (i = 0; i < col; i++)
+            {
+                left += LayoutRoot.ColumnDefinitions[i].ActualWidth;
+            }
+            width = LayoutRoot.ColumnDefinitions[i].ActualWidth;
+
+            return new Rect(new Point(left, top), new Size(width, height));
         }
 
-        private void DrawLines()
+        private Rect ConvertNumberToCellCoords(int cellNum)
         {
-            foreach (var shape in _shapes)
-            {
-                LayoutRoot.Children.Remove(shape.Parent as Canvas);
-            }
-            _shapes.Clear();
+            return GetDrawingCellCoords(cellNum % 3, cellNum / 3);
+        }
 
-            var glowBrush = new ImageBrush {ImageSource = new BitmapImage(new Uri(Path.Combine(Directory.GetCurrentDirectory(), "glow.png")))};
+        private BitmapSource DrawGlow(string transformedText, double scaleX, double scaleY)
+        {
+            var bitmap = new RenderTargetBitmap((int)(LayoutRoot.ActualWidth * scaleX), (int)(LayoutRoot.ActualHeight * scaleY), 96, 96, PixelFormats.Pbgra32);
+            Rect? lastRect = null;
+
+            var glowBrush = new ImageBrush { Opacity = 0.9, ImageSource = new BitmapImage(new Uri(Path.Combine(Directory.GetCurrentDirectory(), "glow.png"))) };
             var glowBrushCircle = new ImageBrush { ImageSource = new BitmapImage(new Uri(Path.Combine(Directory.GetCurrentDirectory(), "glow.png"))) };
             glowBrushCircle.Stretch = Stretch.UniformToFill;
             var transformGroup = new TransformGroup();
-            transformGroup.Children.Add(new ScaleTransform(1.1, 1));
-            transformGroup.Children.Add(new TranslateTransform(-2, 0));
+            transformGroup.Children.Add(new ScaleTransform(1.2, 1));
+            transformGroup.Children.Add(new TranslateTransform(-4 * (scaleX + scaleY) / 2, 0));
             glowBrushCircle.Transform = transformGroup;
 
-            Point? lastPoint = null;
-            var transformedText = Text.Text;
-            _transformers.ToList().ForEach(x => transformedText = x.Transform(transformedText));
-            var points = CalculatePoints();
+            var result = new byte[(int)(LayoutRoot.ActualWidth * scaleX) * 4 * (int)(LayoutRoot.ActualHeight * scaleY)];
 
             foreach (var symbol in transformedText)
             {
                 if (symbol < '1' || symbol > '9') continue;
-                var point = points[symbol - '1'];
-                var viewBox = _labels[symbol - '1'].Parent as Viewbox;
-                      
-                if (lastPoint != null)
+                var rect = ConvertNumberToCellCoords(symbol - '1');
+                rect.X *= scaleX;
+                rect.Y *= scaleY;
+                rect.Width *= scaleX;
+                rect.Height *= scaleY;
+
+                if (lastRect != null)
                 {
-                    if (lastPoint == point)
+                    if (lastRect == rect)
                     {
+                        // Glow
+                        var canvas = new Canvas();
+
                         var circle = new Ellipse
                         {
                             Stroke = glowBrushCircle,
-                            StrokeThickness = 20
+                            StrokeThickness = (GlowSize.Value - 3.5) * (scaleX + scaleY) / 2
                         };
-                        circle.Width = 40;
-                        circle.Height = 40;
-                        Canvas.SetLeft(circle, LayoutRoot.ColumnDefinitions[Grid.GetColumn(viewBox)].ActualWidth / 2 - 20);
-                        Canvas.SetTop(circle, LayoutRoot.RowDefinitions[Grid.GetRow(viewBox)].ActualHeight / 2 - 20);
+                        circle.Width = (GlowSize.Value - 3.5) * 2 * scaleX;
+                        circle.Height = (GlowSize.Value - 3.5) * 2 * scaleY;
+                        circle.Opacity = 0.35;
+                        Canvas.SetLeft(circle, rect.Width / 2 - (GlowSize.Value - 3.5) * scaleX + rect.Left);
+                        Canvas.SetTop(circle, rect.Height / 2 - (GlowSize.Value - 3.5) * scaleY + rect.Top);
+                        canvas.Children.Add(circle);
 
                         var circle2 = new Ellipse
                         {
-                            Stroke = new SolidColorBrush(Colors.Black),
-                            StrokeThickness = 15
+                            Stroke = glowBrushCircle,
+                            StrokeThickness = (GlowSize.Value - 3) * (scaleX + scaleY) / 2
                         };
-                        circle2.Width = 30;
-                        circle2.Height = 30;
-                        Canvas.SetLeft(circle2, LayoutRoot.ColumnDefinitions[Grid.GetColumn(viewBox)].ActualWidth / 2 - 15);
-                        Canvas.SetTop(circle2, LayoutRoot.RowDefinitions[Grid.GetRow(viewBox)].ActualHeight / 2 - 15);
+                        circle2.Width = (GlowSize.Value - 3) * 2 * scaleX;
+                        circle2.Height = (GlowSize.Value - 3) * 2 * scaleY;
+                        circle2.Opacity = 0.2;
+                        Canvas.SetLeft(circle2, rect.Width / 2 - (GlowSize.Value - 3) * scaleX + rect.Left);
+                        Canvas.SetTop(circle2, rect.Height / 2 - (GlowSize.Value - 3) * scaleY + rect.Top);
+                        canvas.Children.Add(circle2);
 
-                        var canvas = new Canvas();
-                        Grid.SetZIndex(canvas, 555);
-                        Grid.SetColumn(canvas, Grid.GetColumn(viewBox));
-                        Grid.SetRow(canvas, Grid.GetRow(viewBox));
-                        LayoutRoot.Children.Add(canvas);
-                        canvas.Children.Add(circle);
+                        var circle3 = new Ellipse
+                        {
+                            Stroke = glowBrushCircle,
+                            StrokeThickness = (GlowSize.Value - 2.5) * (scaleX + scaleY) / 2
+                        };
+                        circle3.Width = (GlowSize.Value - 2.5) * 2 * scaleX;
+                        circle3.Height = (GlowSize.Value - 2.5) * 2 * scaleY;
+                        circle3.Opacity = 0.5;
+                        Canvas.SetLeft(circle3, rect.Width / 2 - (GlowSize.Value - 2.5) * scaleX + rect.Left);
+                        Canvas.SetTop(circle3, rect.Height / 2 - (GlowSize.Value - 2.5) * scaleY + rect.Top);
+                        canvas.Children.Add(circle3);
 
-                        var canvas2 = new Canvas();
-                        Grid.SetZIndex(canvas2, 888);
-                        Grid.SetColumn(canvas2, Grid.GetColumn(viewBox));
-                        Grid.SetRow(canvas2, Grid.GetRow(viewBox));
-                        LayoutRoot.Children.Add(canvas2);
-                        canvas2.Children.Add(circle2);
-
-                        _shapes.Add(circle);
-                        _shapes.Add(circle2);
+                        canvas.Measure(new Size(rect.Width, rect.Height));
+                        canvas.Arrange(new Rect(new Size(rect.Width, rect.Height)));
+                        canvas.UpdateLayout();
+                        
+                        bitmap.Render(canvas);
                     }
                     else
                     {
                         var lineLength =
-                            Math.Sqrt(
-                                Math.Abs(point.X - lastPoint.Value.X) *
-                                Math.Abs(point.X - lastPoint.Value.X) +
-                                Math.Abs(point.Y - lastPoint.Value.Y) *
-                                Math.Abs(point.Y - lastPoint.Value.Y));
+                           Math.Sqrt(
+                               Math.Abs(rect.Left - lastRect.Value.Left) *
+                               Math.Abs(rect.Left - lastRect.Value.Left) +
+                               Math.Abs(rect.Top - lastRect.Value.Top) *
+                               Math.Abs(rect.Top - lastRect.Value.Top));
                         var proportion = lineLength / Math.Sin(Math.PI / 180 * 90);
 
-                        var angle = Math.Asin(Math.Abs(point.Y - lastPoint.Value.Y) / proportion) * (180 / Math.PI);
-                        if (point.X > lastPoint.Value.X && point.Y == lastPoint.Value.Y)
+                        var angle = Math.Asin(Math.Abs(rect.Top - lastRect.Value.Top) / proportion) * (180 / Math.PI);
+                        if (rect.Left > lastRect.Value.Left && rect.Top == lastRect.Value.Top)
                         {
                             angle += 90;
                         }
 
-                        if (point.X < lastPoint.Value.X && point.Y == lastPoint.Value.Y)
+                        if (rect.Left < lastRect.Value.Left && rect.Top == lastRect.Value.Top)
                         {
                             angle -= 90;
                         }
 
-                        if (point.X == lastPoint.Value.X && point.Y > lastPoint.Value.Y)
+                        if (rect.Left == lastRect.Value.Left && rect.Top > lastRect.Value.Top)
                         {
                             angle += 90;
                         }
 
-                        if (point.X == lastPoint.Value.X && point.Y < lastPoint.Value.Y)
+                        if (rect.Left == lastRect.Value.Left && rect.Top < lastRect.Value.Top)
                         {
                             angle -= 90;
                         }
 
-                        if (point.X > lastPoint.Value.X && point.Y > lastPoint.Value.Y)
+                        if (rect.Left > lastRect.Value.Left && rect.Top > lastRect.Value.Top)
                         {
                             angle += 90;
                         }
 
-                        if (point.X > lastPoint.Value.X && point.Y < lastPoint.Value.Y)
+                        if (rect.Left > lastRect.Value.Left && rect.Top < lastRect.Value.Top)
                         {
-                            angle = Math.Asin(Math.Abs(point.X - lastPoint.Value.X) / proportion) * (180 / Math.PI);
+                            angle = Math.Asin(Math.Abs(rect.Left - lastRect.Value.Left) / proportion) * (180 / Math.PI);
                         }
 
-                        if (point.X < lastPoint.Value.X && point.Y < lastPoint.Value.Y)
+                        if (rect.Left < lastRect.Value.Left && rect.Top < lastRect.Value.Top)
                         {
                             angle -= 90;
                         }
 
-                        if (point.X < lastPoint.Value.X && point.Y > lastPoint.Value.Y)
+                        if (rect.Left < lastRect.Value.Left && rect.Top > lastRect.Value.Top)
                         {
-                            angle = Math.Asin(Math.Abs(point.X - lastPoint.Value.X) / proportion) * (180 / Math.PI);
+                            angle = Math.Asin(Math.Abs(rect.Left - lastRect.Value.Left) / proportion) * (180 / Math.PI);
                             angle -= 180;
                         }
 
+                        // Glow
+                        var canvas = new Canvas();
+
                         var line = new Line
-                        {                       
+                        {
                             Stroke = glowBrush,
-                            StrokeThickness = 20,
+                            StrokeThickness = GlowSize.Value * (scaleX + scaleY) / 2,
                             StrokeStartLineCap = PenLineCap.Round,
                             StrokeEndLineCap = PenLineCap.Round,
                         };
-                        line.X1 = LayoutRoot.ColumnDefinitions[Grid.GetColumn(viewBox)].ActualWidth / 2;
-                        line.Y1 = LayoutRoot.RowDefinitions[Grid.GetRow(viewBox)].ActualHeight / 2;
-                        line.X2 = LayoutRoot.ColumnDefinitions[Grid.GetColumn(viewBox)].ActualWidth / 2;
-                        line.Y2 = LayoutRoot.RowDefinitions[Grid.GetRow(viewBox)].ActualHeight / 2 + lineLength;
+                        line.X1 = rect.Width / 2;
+                        line.Y1 = rect.Height / 2;
+                        line.X2 = rect.Width / 2;
+                        line.Y2 = rect.Height / 2 + lineLength;
+                        line.Opacity = 0.5;
+                        canvas.Children.Add(line);
 
                         var line2 = new Line
                         {
-                            Stroke = new SolidColorBrush(Colors.Black),
-                            StrokeThickness = 10,
+                            Stroke = glowBrush,
+                            StrokeThickness = (GlowSize.Value + 0.5) * (scaleX + scaleY) / 2,
                             StrokeStartLineCap = PenLineCap.Round,
                             StrokeEndLineCap = PenLineCap.Round,
                         };
-                        line2.X1 = LayoutRoot.ColumnDefinitions[Grid.GetColumn(viewBox)].ActualWidth / 2;
-                        line2.Y1 = LayoutRoot.RowDefinitions[Grid.GetRow(viewBox)].ActualHeight / 2;
-                        line2.X2 = LayoutRoot.ColumnDefinitions[Grid.GetColumn(viewBox)].ActualWidth / 2;
-                        line2.Y2 = LayoutRoot.RowDefinitions[Grid.GetRow(viewBox)].ActualHeight / 2 + lineLength;
+                        line2.X1 = rect.Width / 2;
+                        line2.Y1 = rect.Height / 2 - 0.5 * (scaleX + scaleY) / 2;
+                        line2.X2 = rect.Width / 2;
+                        line2.Y2 = rect.Height / 2 + lineLength + 0.5 * (scaleX + scaleY) / 2;
+                        line2.Opacity = 0.35;
+                        canvas.Children.Add(line2);
 
-                        var canvas = new Canvas();
+                        var line3 = new Line
+                        {
+                            Stroke = glowBrush,
+                            StrokeThickness = (GlowSize.Value + 1) * (scaleX + scaleY) / 2,
+                            StrokeStartLineCap = PenLineCap.Round,
+                            StrokeEndLineCap = PenLineCap.Round,
+                        };
+                        line3.X1 = rect.Width / 2;
+                        line3.Y1 = rect.Height / 2 - 1 * (scaleX + scaleY) / 2;
+                        line3.X2 = rect.Width / 2;
+                        line3.Y2 = rect.Height / 2 + lineLength + 1 * (scaleX + scaleY) / 2;
+                        line3.Opacity = 0.15;
+                        canvas.Children.Add(line3);
+
                         canvas.RenderTransformOrigin = new Point(0.5, 0.5);
-                        canvas.RenderTransform = new RotateTransform(angle);
-                        Grid.SetZIndex(canvas, 666);
-                        Grid.SetColumn(canvas, Grid.GetColumn(viewBox));
-                        Grid.SetRow(canvas, Grid.GetRow(viewBox));
-                        LayoutRoot.Children.Add(canvas);
-                        canvas.Children.Add(line);
 
-                        var canvas2 = new Canvas();
-                        canvas2.RenderTransformOrigin = new Point(0.5, 0.5);
-                        canvas2.RenderTransform = new RotateTransform(angle);
-                        Grid.SetZIndex(canvas2, 999);
-                        Grid.SetColumn(canvas2, Grid.GetColumn(viewBox));
-                        Grid.SetRow(canvas2, Grid.GetRow(viewBox));
-                        LayoutRoot.Children.Add(canvas2);
-                        canvas2.Children.Add(line2);
+                        transformGroup = new TransformGroup();
+                        transformGroup.Children.Add(new RotateTransform(angle));
+                        transformGroup.Children.Add(new TranslateTransform(rect.Left, rect.Top));
+                        canvas.RenderTransform = transformGroup;
 
-                        _shapes.Add(line);
-                        _shapes.Add(line2);
+                        canvas.Measure(new Size(rect.Width, rect.Height));
+                        canvas.Arrange(new Rect(new Size(rect.Width, rect.Height)));
+                        canvas.UpdateLayout();
+
+                        bitmap.Render(canvas);
+                        //
                     }
                 }
 
-                lastPoint = point;
+                lastRect = rect;
             }
+
+            bitmap.CopyPixels(
+                result,
+                (int)(LayoutRoot.ActualWidth * scaleX) * 4,
+                0);
+
+            for (var offset = 0; offset < result.Length; offset += 4)
+            {
+                if (result[offset + 3] == 0) continue;
+
+                result[offset] = (byte)Math.Round(result[offset] / (result[offset + 3] / 255.0));
+                result[offset + 1] = (byte)Math.Round(result[offset + 1] / (result[offset + 3] / 255.0));
+                result[offset + 2] = (byte)Math.Round(result[offset + 2] / (result[offset + 3] / 255.0));
+            }
+
+            for (var offset = 0; offset < result.Length; offset += 4)
+            {
+                if (result[offset + 3] == 0) continue;
+
+                result[offset] = Math.Min((byte)(result[offset] * (GlowColor.SelectedColor.Value.B / 255.0)), (byte)255);
+                result[offset + 1] = Math.Min((byte)(result[offset + 1] * (GlowColor.SelectedColor.Value.G / 255.0)), (byte)255);
+                result[offset + 2] = Math.Min((byte)(result[offset + 2] * (GlowColor.SelectedColor.Value.R / 255.0)), (byte)255);
+                result[offset + 3] = Math.Min((byte)(result[offset + 3] * (GlowColor.SelectedColor.Value.A / 255.0)), (byte)255);
+            }
+
+            return
+                BitmapSource.Create(
+                    (int)(LayoutRoot.ActualWidth * scaleX),
+                    (int)(LayoutRoot.ActualHeight * scaleY),
+                    96, 96, PixelFormats.Bgra32, null, result, (int)(LayoutRoot.ActualWidth * scaleX) * 4);
         }
 
-        private void TextBox_TextChanged(object sender, TextChangedEventArgs e)
+        private BitmapSource DrawLines(string transformedText, double scaleX, double scaleY)
+        {
+            var bitmap = new RenderTargetBitmap((int)(LayoutRoot.ActualWidth * scaleX), (int)(LayoutRoot.ActualHeight * scaleY), 96, 96, PixelFormats.Pbgra32);
+            Rect? lastRect = null;
+
+            var result = new byte[(int)(LayoutRoot.ActualWidth * scaleX) * 4 * (int)(LayoutRoot.ActualHeight * scaleY)];
+
+            foreach (var symbol in transformedText)
+            {
+                if (symbol < '1' || symbol > '9') continue;
+                var rect = ConvertNumberToCellCoords(symbol - '1');
+                rect.X *= scaleX;
+                rect.Y *= scaleY;
+                rect.Width *= scaleX;
+                rect.Height *= scaleY;
+                var color = new Color
+                {
+                    A = 255,
+                    R = LineColor.SelectedColor.Value.R,
+                    G = LineColor.SelectedColor.Value.G,
+                    B = LineColor.SelectedColor.Value.B
+                };
+
+                if (lastRect != null)
+                {
+                    if (lastRect == rect)
+                    {
+                        var canvas = new Canvas();
+
+                        var circle = new Ellipse
+                        {
+                            Stroke = new SolidColorBrush(color),
+                            StrokeThickness = (LineSize.Value + 2) * (scaleX + scaleY) / 2
+                        };
+                        circle.Width = (LineSize.Value + 2) * 2 * scaleX;
+                        circle.Height = (LineSize.Value + 2) * 2 * scaleY;
+                        Canvas.SetLeft(circle, rect.Width / 2 - (LineSize.Value + 2) * scaleX + rect.Left);
+                        Canvas.SetTop(circle, rect.Height / 2 - (LineSize.Value + 2) * scaleY + rect.Top);
+                        canvas.Children.Add(circle);
+                        
+                        canvas.Measure(new Size(rect.Width, rect.Height));
+                        canvas.Arrange(new Rect(new Size(rect.Width, rect.Height)));
+                        canvas.UpdateLayout();
+
+                        bitmap.Render(canvas);
+                    }
+                    else
+                    {
+                        var lineLength =
+                           Math.Sqrt(
+                               Math.Abs(rect.Left - lastRect.Value.Left) *
+                               Math.Abs(rect.Left - lastRect.Value.Left) +
+                               Math.Abs(rect.Top - lastRect.Value.Top) *
+                               Math.Abs(rect.Top - lastRect.Value.Top));
+                        var proportion = lineLength / Math.Sin(Math.PI / 180 * 90);
+
+                        var angle = Math.Asin(Math.Abs(rect.Top - lastRect.Value.Top) / proportion) * (180 / Math.PI);
+                        if (rect.Left > lastRect.Value.Left && rect.Top == lastRect.Value.Top)
+                        {
+                            angle += 90;
+                        }
+
+                        if (rect.Left < lastRect.Value.Left && rect.Top == lastRect.Value.Top)
+                        {
+                            angle -= 90;
+                        }
+
+                        if (rect.Left == lastRect.Value.Left && rect.Top > lastRect.Value.Top)
+                        {
+                            angle += 90;
+                        }
+
+                        if (rect.Left == lastRect.Value.Left && rect.Top < lastRect.Value.Top)
+                        {
+                            angle -= 90;
+                        }
+
+                        if (rect.Left > lastRect.Value.Left && rect.Top > lastRect.Value.Top)
+                        {
+                            angle += 90;
+                        }
+
+                        if (rect.Left > lastRect.Value.Left && rect.Top < lastRect.Value.Top)
+                        {
+                            angle = Math.Asin(Math.Abs(rect.Left - lastRect.Value.Left) / proportion) * (180 / Math.PI);
+                        }
+
+                        if (rect.Left < lastRect.Value.Left && rect.Top < lastRect.Value.Top)
+                        {
+                            angle -= 90;
+                        }
+
+                        if (rect.Left < lastRect.Value.Left && rect.Top > lastRect.Value.Top)
+                        {
+                            angle = Math.Asin(Math.Abs(rect.Left - lastRect.Value.Left) / proportion) * (180 / Math.PI);
+                            angle -= 180;
+                        }
+
+                        var canvas = new Canvas();
+
+                        var line = new Line
+                        {
+                            Stroke = new SolidColorBrush(color),
+                            StrokeThickness = LineSize.Value * (scaleX + scaleY) / 2,
+                            StrokeStartLineCap = PenLineCap.Round,
+                            StrokeEndLineCap = PenLineCap.Round,
+                        };
+                        line.X1 = rect.Width / 2;
+                        line.Y1 = rect.Height / 2;
+                        line.X2 = rect.Width / 2;
+                        line.Y2 = rect.Height / 2 + lineLength;
+                        canvas.Children.Add(line);
+                        canvas.RenderTransformOrigin = new Point(0.5, 0.5);
+
+                        var transformGroup = new TransformGroup();
+                        transformGroup.Children.Add(new RotateTransform(angle));
+                        transformGroup.Children.Add(new TranslateTransform(rect.Left, rect.Top));
+                        canvas.RenderTransform = transformGroup;
+
+                        canvas.Measure(new Size(rect.Width, rect.Height));
+                        canvas.Arrange(new Rect(new Size(rect.Width, rect.Height)));
+                        canvas.UpdateLayout();
+
+                        bitmap.Render(canvas);
+                    }
+                }
+
+                lastRect = rect;
+            }
+
+            bitmap.CopyPixels(
+                result,
+                (int)(LayoutRoot.ActualWidth * scaleX) * 4,
+                0);
+
+            for (var offset = 0; offset < result.Length; offset += 4)
+            {
+                if (result[offset + 3] == 0) continue;
+
+                result[offset] = (byte)Math.Round(result[offset] / (result[offset + 3] / 255.0));
+                result[offset + 1] = (byte)Math.Round(result[offset + 1] / (result[offset + 3] / 255.0));
+                result[offset + 2] = (byte)Math.Round(result[offset + 2] / (result[offset + 3] / 255.0));
+            }
+
+            for (var offset = 0; offset < result.Length; offset += 4)
+            {
+                if (result[offset + 3] == 0) continue;
+                result[offset + 3] = Math.Min((byte)(result[offset + 3] * (LineColor.SelectedColor.Value.A / 255.0)), (byte)255);
+            }
+
+            return
+                BitmapSource.Create(
+                    (int)(LayoutRoot.ActualWidth * scaleX),
+                    (int)(LayoutRoot.ActualHeight * scaleY),
+                    96, 96, PixelFormats.Bgra32, null, result, (int)(LayoutRoot.ActualWidth * scaleX) * 4);
+        }
+
+        private void DrawAll()
         {
             if (!IsInitialized) return;
 
-            DrawLines();
-        }
+            var transformedText = Text.Text;
+            _transformers.ToList().ForEach(x => transformedText = x.Transform(transformedText));
 
-        private void LayoutRoot_SizeChanged(object sender, SizeChangedEventArgs e)
-        {
-            if (!IsInitialized) return;
-
-            DrawLines();
-        }
-
-        private void MenuItem_OnCloseClick(object sender, RoutedEventArgs e)
-        {
-            if (!IsInitialized) return;
-
-            Close();
+            GlowCanvas.Source = DrawGlow(transformedText, 0.5, 0.5);
+            LineCanvas.Source = DrawLines(transformedText, 1, 1);
         }
 
         private RenderTargetBitmap GetImage()
         {
-            var size = new Size(LayoutRoot.ActualWidth, LayoutRoot.ActualHeight);
-            var result = new RenderTargetBitmap((int)size.Width * 10, (int)size.Height * 10, 96, 96, PixelFormats.Pbgra32);
+            var transformedText = Text.Text;
+            _transformers.ToList().ForEach(x => transformedText = x.Transform(transformedText));
 
-            ScaleTransform myScaleTransform = new ScaleTransform();
-            myScaleTransform.ScaleY = 10;
-            myScaleTransform.ScaleX = 10;
+            var glowImage = new Image();
+            var linesImage = new Image();
 
-            LayoutRoot.RenderTransform = myScaleTransform;
-            Menu.Visibility = Visibility.Collapsed;
-            Text.Visibility = Visibility.Collapsed;
+            glowImage.Source = DrawGlow(transformedText, 5, 5);
+            glowImage.Measure(new Size((int)(LayoutRoot.ActualWidth * 5), (int)(LayoutRoot.ActualHeight * 5)));
+            glowImage.Arrange(new Rect(new Size((int)(LayoutRoot.ActualWidth * 5), (int)(LayoutRoot.ActualHeight * 5))));
+            glowImage.UpdateLayout();
 
-            foreach (var children in LayoutRoot.Children)
-            {
-                if (!(children is Canvas))
-                {
-                    (children as UIElement).Visibility = Visibility.Hidden;
-                }
-            }
+            linesImage.Source = DrawLines(transformedText, 5, 5);
+            linesImage.Measure(new Size((int)(LayoutRoot.ActualWidth * 5), (int)(LayoutRoot.ActualHeight * 5)));
+            linesImage.Arrange(new Rect(new Size((int)(LayoutRoot.ActualWidth * 5), (int)(LayoutRoot.ActualHeight * 5))));
+            linesImage.UpdateLayout();
 
-            LayoutRoot.UpdateLayout();
-            result.Render(LayoutRoot);
+            var bitmap = new RenderTargetBitmap((int)(LayoutRoot.ActualWidth * 5), (int)(LayoutRoot.ActualHeight * 5), 96, 96, PixelFormats.Pbgra32);
+            bitmap.Render(glowImage);
+            bitmap.Render(linesImage);
 
-            foreach (var children in LayoutRoot.Children)
-            {
-                if (!(children is Canvas))
-                {
-                    (children as UIElement).Visibility = Visibility.Visible;
-                }
-            }
-
-            Menu.Visibility = Visibility.Visible;
-            Text.Visibility = Visibility.Visible;
-            LayoutRoot.RenderTransform = null;
-            LayoutRoot.UpdateLayout();
-
-            return result;
+            return bitmap;
         }
 
         private void MenuItem_OnSaveClick(object sender, RoutedEventArgs e)
         {
-            if (!IsInitialized) return;
-
             var dlg = new Microsoft.Win32.SaveFileDialog();
             dlg.FileName = "sigil"; 
             dlg.DefaultExt = ".png";
@@ -357,7 +574,43 @@ namespace Zizit.Sigils.Generator.UI
                     encoder.Frames.Add(BitmapFrame.Create(GetImage()));
                     encoder.Save(file);
                 }
+                MessageBox.Show("Saved", "Success", MessageBoxButton.OK);
             }
+        }
+
+        private void MenuItem_OnCloseClick(object sender, RoutedEventArgs e)
+        {
+            Close();
+        }
+
+        private void LineColor_OnSelectedColorChanged(object sender, RoutedPropertyChangedEventArgs<Color?> e)
+        {
+            DrawAll();
+        }
+
+        private void GlowColor_OnSelectedColorChanged(object sender, RoutedPropertyChangedEventArgs<Color?> e)
+        {
+            DrawAll();
+        }
+
+        private void TextBox_TextChanged(object sender, TextChangedEventArgs e)
+        {
+            DrawAll();
+        }
+
+        private void LayoutRoot_SizeChanged(object sender, SizeChangedEventArgs e)
+        {
+            DrawAll();
+        }
+
+        private void GlowSize_OnValueChanged(object sender, RoutedPropertyChangedEventArgs<double> e)
+        {
+            DrawAll();
+        }
+
+        private void LineSize_OnValueChanged(object sender, RoutedPropertyChangedEventArgs<double> e)
+        {
+            DrawAll();
         }
     }
 }

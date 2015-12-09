@@ -3,9 +3,9 @@
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
         xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
-        xmlns:local="clr-namespace:Zizit.Sigils.Generator.UI"
+        xmlns:xctk="http://schemas.xceed.com/wpf/xaml/toolkit"
         mc:Ignorable="d"
-        Title="MainWindow" MinWidth="300" MaxWidth="600" MinHeight="400" MaxHeight="600">
+        Title="MainWindow" MinWidth="300" MaxWidth="600" MinHeight="450" MaxHeight="700">
     <Grid x:Name="LayoutRoot" SizeChanged="LayoutRoot_SizeChanged">
         <Menu x:Name="Menu">
             <MenuItem Header="_File">
@@ -15,6 +15,17 @@
             </MenuItem>
         </Menu>
         <TextBox x:Name="Text" FontSize="20" Text="This program should work" TextChanged="TextBox_TextChanged"></TextBox>
-        <Canvas x:Name="FrameBuffer" />
+        <Label x:Name="ColorsLabel">
+            <TextBlock>Colors (glow/line):</TextBlock>
+        </Label>
+        <xctk:ColorPicker x:Name="GlowColor" SelectedColor="#A241FFE1" SelectedColorChanged="GlowColor_OnSelectedColorChanged" ColorMode="ColorCanvas"></xctk:ColorPicker>
+        <xctk:ColorPicker x:Name="LineColor" SelectedColor="#5A4D0099" SelectedColorChanged="LineColor_OnSelectedColorChanged" ColorMode="ColorCanvas"></xctk:ColorPicker>
+        <Label x:Name="SizeLabel">
+            <TextBlock>Size(glow/line):</TextBlock>
+        </Label>
+        <Slider x:Name="GlowSize" Minimum="10" Maximum="40" Value="20" ValueChanged="GlowSize_OnValueChanged"></Slider>
+        <Slider x:Name="LineSize" Minimum="5" Maximum="30" Value="10" ValueChanged="LineSize_OnValueChanged"></Slider>
+        <Image x:Name="GlowCanvas" />
+        <Image x:Name="LineCanvas" />
     </Grid>   
 </Window>
